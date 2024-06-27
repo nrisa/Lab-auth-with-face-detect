@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login/Register with Face Detection</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        video, canvas {
+            border: 1px solid black;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        .buttons {
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 99;
+        }
+        .buttons button {
+            margin-right: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        .buttons button:last-child {
+            margin-right: 0;
+        }
+
+        .atas {
+            background-color: black;
+            position: fixed;
+            z-index: 999;
+            left: 0;
+            right: 0;
+            top: 0;
+            height: 80px;
+        }
+    </style>
+</head>
+<body>
+    <div class="atas">
+        <h1>Login/Register with Face Detection</h1>
+        <div class="buttons">
+            <button onclick="register()">Register</button>
+            <button onclick="login()">Login</button>
+        </div>
+    </div>
+
+    <video id="video" width="640" height="480" autoplay></video>
+    <canvas id="canvas" width="640" height="480"></canvas>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const context = canvas.getContext('2d');
+
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                return new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        resolve(video);
+                    };
+                });
+            } catch (error) {
+                console.error('Error accessing the camera: ', error);
+                alert('Error accessing the camera. Please check the permissions.');
+            }
+        }
+
+        async function detectFace() {
+            try {
+                const model = await blazeface.load();
+                const returnTensors = false;
+
+                // Cek apakah video sedang diputar
+                if (video.paused || video.ended) {
+                    return null;
+                }
+
+                const predictions = await model.estimateFaces(video, returnTensors);
+
+                // Bersihkan kanvas sebelum menggambar
+                context.clearRect(0, 0, canvas.width, canvas.height);
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                if (predictions.length > 0) {
+                    const prediction = predictions[0];
+                    context.beginPath();
+                    context.lineWidth = "4";
+                    context.strokeStyle = "red";
+                    context.rect(
+                        prediction.topLeft[0],
+                        prediction.topLeft[1],
+                        prediction.bottomRight[0] - prediction.topLeft[0],
+                        prediction.bottomRight[1] - prediction.topLeft[1]
+                    );
+                    context.stroke();
+
+                    // Tambahkan log untuk debugging
+                    console.log('Face detected:', prediction);
+
+                    const dataUrl = canvas.toDataURL('image/jpeg');
+                    return dataUrl;
+                } else {
+                    console.log('No face detected');
+                }
+                return null;
+            } catch (error) {
+                console.error('Error detecting face: ', error);
+                alert('salah!.');
+                return null;
+            }
+        }
+
+        async function register() {
+            const faceData = await detectFace();
+            if (faceData) {
+                fetch('register.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ faceData })
+                }).then(response => response.json())
+                  .then(data => alert(data.message))
+                  .catch(error => console.error('Error:', error));
+            } else {
+                alert('Face not detected, please try again.');
+            }
+        }
+
+        async function login() {
+            const faceData = await detectFace();
+            if (faceData) {
+                fetch('login.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ faceData })
+                }).then(response => response.json())
+                  .then(data => alert(data.message))
+                  .catch(error => console.error('Error:', error));
+            } else {
+                alert('Face not detected, please try again.');
+            }
+        }
+
+        async function main() {
+            await setupCamera();
+            video.play();
+
+            // Cek deteksi wajah setiap 500ms untuk memantau secara berkala
+            setInterval(detectFace, 500);
+        }
+
+        main();
+    </script>
+</body>
+</html>
